@@ -87,9 +87,24 @@ i32 fsRead(i32 fd, i32 numb, void* buf) {
   // ++++++++++++++++++++++++
   // Insert your code here
   // ++++++++++++++++++++++++
+  i32 inum = bfsFdToInum(fd);
+  i32 size = bfsGetSize(inum);
+  i32 cursorPos = bfsTell(fd);
+  if (cursorPos + numb > size) numb = size - cursorPos; // if set to read past file, read up to end of file
+  i32 beginBlock = cursorPos / BYTESPERBLOCK;
+  i32 lastBlock = (cursorPos + numb) / BYTESPERBLOCK;
 
-  FATAL(ENYI);                                  // Not Yet Implemented!
-  return 0;
+  i8 buffer[BYTESPERBLOCK];
+  i32 cursorBuffer = 0;
+  while (beginBlock <= lastBlock) {
+    bfsRead(inum, beginBlock, buffer);
+    memcpy(buf + cursorBuffer, buffer, BYTESPERBLOCK);
+    cursorBuffer += BYTESPERBLOCK;
+    beginBlock++;
+  }
+  fsSeek(fd, numb, SEEK_CUR);
+  FATAL(ENYI);
+  return numb;
 }
 
 
@@ -161,6 +176,7 @@ i32 fsWrite(i32 fd, i32 numb, void* buf) {
   // ++++++++++++++++++++++++
   // Insert your code here
   // ++++++++++++++++++++++++
+  
 
   FATAL(ENYI);                                  // Not Yet Implemented!
   return 0;
