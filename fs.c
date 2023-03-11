@@ -83,27 +83,26 @@ i32 fsOpen(str fname) {
 // read (may be less than 'numb' if we hit EOF).  On failure, abort
 // ============================================================================
 i32 fsRead(i32 fd, i32 numb, void* buf) {
-
-  // ++++++++++++++++++++++++
-  // Insert your code here
-  // ++++++++++++++++++++++++
   i32 inum = bfsFdToInum(fd);
   i32 size = bfsGetSize(inum);
-  i32 cursorPos = bfsTell(fd);
-  if (cursorPos + numb > size) numb = size - cursorPos; // if set to read past file, read up to end of file
-  i32 beginBlock = cursorPos / BYTESPERBLOCK;
-  i32 lastBlock = (cursorPos + numb) / BYTESPERBLOCK;
+  i32 cursor = bfsTell(fd);
+  i32 currFBN = cursor / BYTESPERBLOCK;
+  if (cursor + numb > size) numb = size - cursor;
+  i32 lastFBN = (cursor + numb) / BYTESPERBLOCK;
 
-  i8 buffer[BYTESPERBLOCK];
-  i32 cursorBuffer = 0;
-  while (beginBlock <= lastBlock) {
-    bfsRead(inum, beginBlock, buffer);
-    memcpy(buf + cursorBuffer, buffer, BYTESPERBLOCK);
-    cursorBuffer += BYTESPERBLOCK;
-    beginBlock++;
+  i8 bioBuff[BYTESPERBLOCK];
+  i32 startBuff;
+  i32 endBuff;
+  i32 currCursor = cursor;
+  while (currFBN <= lastFBN) {
+    bfsRead(inum, currFBN, bioBuff);
+    startBuff = currCursor - (currFBN * BYTESPERBLOCK);
+    endBuff = (currCursor + (numb - (currCursor - cursor))) > ((currFBN + 1) * BYTESPERBLOCK) ? BYTESPERBLOCK : (numb - (currCursor - cursor)) + startBuff;
+    memcpy(buf + (currCursor - cursor), bioBuff + startBuff, endBuff - startBuff);
+    currCursor += (endBuff - startBuff);
+    currFBN++;
   }
   fsSeek(fd, numb, SEEK_CUR);
-  FATAL(ENYI);
   return numb;
 }
 
@@ -172,12 +171,28 @@ i32 fsSize(i32 fd) {
 // destination file.  On success, return 0.  On failure, abort
 // ============================================================================
 i32 fsWrite(i32 fd, i32 numb, void* buf) {
-
-  // ++++++++++++++++++++++++
-  // Insert your code here
-  // ++++++++++++++++++++++++
-  
-
-  FATAL(ENYI);                                  // Not Yet Implemented!
+  i32 inum = bfsFdToInum(fd);
+  i32 size = bfsGetSize(inum);
+  i32 cursor = bfsTell(fd);
+  i32 currFBN = cursor / BYTESPERBLOCK;
+  i32 lastFBN = (cursor + numb) / BYTESPERBLOCK;
+  if (cursor + numb > size) bfsExtend(inum, lastFBN);
+  i8 bioBuff[BYTESPERBLOCK];
+  i32 startBuff = 0;
+  i32 endBuff = 0;
+  i32 currCursor = cursor;
+  i32 currDBN = 0;
+  while (currFBN <= lastFBN) {
+    currDBN = bfsFbnToDbn(inum, currFBN);
+    bfsRead(inum, currFBN, bioBuff);
+    startBuff = currCursor - (currFBN * BYTESPERBLOCK);
+    endBuff = (currCursor + (numb - (currCursor - cursor))) > ((currFBN + 1) * BYTESPERBLOCK) ? BYTESPERBLOCK : (numb - (currCursor - cursor)) + startBuff;
+    memcpy(bioBuff + startBuff, buf + (currCursor - cursor), endBuff - startBuff);
+    bioWrite(currDBN, bioBuff);
+    currCursor += (endBuff - startBuff);
+    currFBN++;
+  }
+  fsSeek(fd, numb, SEEK_CUR);
+  if (cursor + numb > size) bfsSetSize(inum, cursor + numb);
   return 0;
 }
