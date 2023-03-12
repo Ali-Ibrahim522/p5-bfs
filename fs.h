@@ -6,10 +6,8 @@
 // ===================================================================
 
 #include <stdio.h>
-#include <stdlib.h>
 #include "alias.h"
 #include "errors.h"
-#include "stdbool.h"
 
 i32 fsClose (i32 fd);
 i32 fsCreate(str name);
