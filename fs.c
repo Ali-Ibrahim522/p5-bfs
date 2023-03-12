@@ -4,6 +4,7 @@
 
 #include "bfs.h"
 #include "fs.h"
+#define min(i, j) (((i) < (j)) ? (i) : (j))
 
 // ============================================================================
 // Close the file currently open on file descriptor 'fd'.
@@ -83,7 +84,7 @@ i32 fsOpen(str fname) {
 // read (may be less than 'numb' if we hit EOF).  On failure, abort
 // ============================================================================
 i32 fsRead(i32 fd, i32 numb, void* buf) {
-  i32 inum = bfsFdToInum(fd);
+  i32 inum = bfsFdToInum(fd); // inum
   i32 size = bfsGetSize(inum); // size of file
   i32 cursor = bfsTell(fd); // cursor starting position
   i32 currFBN = cursor / BYTESPERBLOCK; // starting and current block to read
@@ -94,11 +95,10 @@ i32 fsRead(i32 fd, i32 numb, void* buf) {
   i32 currCursor = cursor; // the cursor current cursor position, updated on each block read
   while (currFBN <= lastFBN) { // while there is a block to read
     bfsRead(inum, currFBN, bioBuff); // read the whole current block
-    i32 startBuff = currCursor - (currFBN * BYTESPERBLOCK); //start == current cursor position - starting point of current block
-    //end == have more than a block left to read? read to end of block, else read whatever amount is left
-    i32 endBuff = (currCursor + (numb - (currCursor - cursor))) > ((currFBN + 1) * BYTESPERBLOCK) ? BYTESPERBLOCK : (numb - (currCursor - cursor)) + startBuff;
-    memcpy(buf + (currCursor - cursor), bioBuff + startBuff, endBuff - startBuff); //write into buf the contents of bioBuff from startBuff to endBuff
-    currCursor += (endBuff - startBuff); // move cursor by the amount of bytes written
+    i32 start = currCursor - (currFBN * BYTESPERBLOCK); // start == current cursor position - starting point of current block
+    i32 read = min(numb - (currCursor - cursor), ((currFBN + 1) * BYTESPERBLOCK) - currCursor); // read == min(remaining bytes to read, amount that can be read in block from start)
+    memcpy(buf + (currCursor - cursor), bioBuff + start, read); // write into buf the contents of bioBuff from startBuff to endBuff
+    currCursor += read; // move cursor by the amount of bytes written
     currFBN++; // move to next block
   }
   fsSeek(fd, numb, SEEK_CUR); // set cursor
@@ -170,27 +170,25 @@ i32 fsSize(i32 fd) {
 // destination file.  On success, return 0.  On failure, abort
 // ============================================================================
 i32 fsWrite(i32 fd, i32 numb, void* buf) {
-  i32 inum = bfsFdToInum(fd);
-  i32 size = bfsGetSize(inum); //file size
+  i32 inum = bfsFdToInum(fd); // inum
+  i32 size = bfsGetSize(inum); // file size
   i32 cursor = bfsTell(fd); // cursor starting position
   i32 currFBN = cursor / BYTESPERBLOCK; //first block to be wrote to
   i32 lastFBN = (cursor + numb) / BYTESPERBLOCK; // last block to be wrote to
-  if (cursor + numb > size) { //if last block is past EOF, extend file to last block
+  if (cursor + numb > size) { // if last block is past EOF, extend file to last block
     bfsExtend(inum, lastFBN); 
     bfsSetSize(inum, cursor + numb);
   }
 
   i8 bioBuff[BYTESPERBLOCK];
   i32 currCursor = cursor; // where the cursor is currently in the current block
-  while (currFBN <= lastFBN) { //while there is a file block to write to
-    i32 currDBN = bfsFbnToDbn(inum, currFBN); // get current DBN from current FBN
+  while (currFBN <= lastFBN) { // while there is a file block to write to
     bfsRead(inum, currFBN, bioBuff); // read the block into bioBuff
-    i32 startBuff = currCursor - (currFBN * BYTESPERBLOCK); //start == current cursor position - starting point of current block
-    //end == have more than a block left to write? write to end of block, else write whatever amount is left
-    i32 endBuff = (currCursor + (numb - (currCursor - cursor))) > ((currFBN + 1) * BYTESPERBLOCK) ? BYTESPERBLOCK : (numb - (currCursor - cursor)) + startBuff;
-    memcpy(bioBuff + startBuff, buf + (currCursor - cursor), endBuff - startBuff); //write into bioBufff[startBuff-endBuff] the next buf contents to be written
-    bioWrite(currDBN, bioBuff); // set the current block to the newly written block
-    currCursor += (endBuff - startBuff); // move cursor by the amount of bytes written
+    i32 start = currCursor - (currFBN * BYTESPERBLOCK); // start == current cursor position - starting point of current block
+    i32 write = min(numb - (currCursor - cursor), ((currFBN + 1) * BYTESPERBLOCK) - currCursor); // write == min(remaining bytes to write, amount that can be wrote in block from start)
+    memcpy(bioBuff + start, buf + (currCursor - cursor), write); // write into bioBuff[startBuff-endBuff] the next buf contents to be written
+    bioWrite(bfsFbnToDbn(inum, currFBN), bioBuff); // set the current block to the newly written block
+    currCursor += write; // move cursor by the amount of bytes written
     currFBN++; // move to next block
   }
   fsSeek(fd, numb, SEEK_CUR); // set cursor
